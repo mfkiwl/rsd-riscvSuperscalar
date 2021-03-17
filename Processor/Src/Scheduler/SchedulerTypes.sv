@@ -8,6 +8,7 @@
 
 package SchedulerTypes;
 
+import MicroArchConf::*;
 import BasicTypes::*;
 import CacheSystemTypes::*;
 import MemoryMapTypes::*;
@@ -19,7 +20,7 @@ import LoadStoreUnitTypes::*;
 import FetchUnitTypes::*;
 
 // Issue queue
-localparam ISSUE_QUEUE_ENTRY_NUM = 16;
+localparam ISSUE_QUEUE_ENTRY_NUM = CONF_ISSUE_QUEUE_ENTRY_NUM;
 localparam ISSUE_QUEUE_ENTRY_NUM_BIT_WIDTH = $clog2(ISSUE_QUEUE_ENTRY_NUM);
 
 typedef logic [ISSUE_QUEUE_ENTRY_NUM_BIT_WIDTH-1:0] IssueQueueIndexPath;
@@ -56,7 +57,7 @@ localparam ISSUE_QUEUE_RESET_CYCLE_BIT_SIZE
 //
 // --- Active list 
 //
-localparam ACTIVE_LIST_ENTRY_NUM = 64;
+localparam ACTIVE_LIST_ENTRY_NUM = CONF_ACTIVE_LIST_ENTRY_NUM;
 localparam ACTIVE_LIST_ENTRY_NUM_BIT_WIDTH = $clog2( ACTIVE_LIST_ENTRY_NUM );
 typedef logic [ACTIVE_LIST_ENTRY_NUM_BIT_WIDTH-1:0] ActiveListIndexPath;
 typedef logic [ACTIVE_LIST_ENTRY_NUM_BIT_WIDTH:0] ActiveListCountPath;
@@ -82,7 +83,7 @@ typedef enum logic [3:0] // ExecutionState
 
     EXEC_STATE_FAULT_INSN_ILLEGAL     = 4'b1100,  // Illegal instruction
     EXEC_STATE_FAULT_INSN_VIOLATION   = 4'b1101,  // Illegal instruction
-    EXEC_STATE_FAULT_INSN_MISALIGNED  = 4'b1110   // Mialigned instruciton address
+    EXEC_STATE_FAULT_INSN_MISALIGNED  = 4'b1110   // Misaligned instruction address
 } ExecutionState;
 localparam EXEC_STATE_BIT_WIDTH = $bits(ExecutionState);
 
@@ -102,7 +103,7 @@ typedef struct packed // ActiveListEntry
     logic isBranch; // TRUE if the op is BR or RIJ
     logic isEnv;    // TRUE if the op is ECALL/EBREAK
     
-    logic last; // そのARM命令における最後のマイクロ命令ならTRUEに
+    logic last;         // TRUE if this micro-op is the last micro-op in an instruction
     logic undefined;
     
     // For releasing a register to a free list on recovery.
@@ -131,7 +132,7 @@ typedef struct packed // ActiveListWriteData
 
 
 // Convert a pointer of an active list to an "age."
-// An "age" can be directly compared with a comparetor.
+// An "age" can be directly compared with a comparator.
 function automatic ActiveListCountPath ActiveListPtrToAge(ActiveListIndexPath ptr, ActiveListIndexPath head);
     ActiveListCountPath age;
     age = ptr;
@@ -271,6 +272,9 @@ typedef struct packed // MemOpInfo
     CSR_CtrlPath csrCtrl;
     ENV_Code envCode;
 
+    // FENCE.I
+    logic isFenceI;
+
     // Complex
 `ifdef RSD_MARCH_UNIFIED_MULDIV_MEM_PIPE
     MulOpSubInfo mulSubInfo;
@@ -324,11 +328,11 @@ typedef struct packed // SchedulerEntry
 
 //
 // A tag for a source CAM and a ready bit table.
-// These tags are used for a ready bit table, thus they are neccesary in
+// These tags are used for a ready bit table, thus they are necessary in
 // matrix based implementation.
 //
 
-// For a phyical register.
+// For a physic's register.
 typedef struct packed // SchedulerRegTag
 {
     PRegNumPath num;
@@ -339,7 +343,7 @@ typedef struct packed // SchedulerRegTag
 // A pointer for a producer matrix.
 //
 
-// For a phyical register.
+// For a physical register.
 typedef struct packed // SchedulerRegPtr
 {
     IssueQueueIndexPath ptr;
@@ -361,8 +365,14 @@ typedef struct packed // SchedulerSrcTag
     SchedulerRegPtr  [ISSUE_QUEUE_SRC_REG_NUM-1:0] regPtr;
 } SchedulerSrcTag;
 
+// Replay queue
+localparam REPLAY_QUEUE_ENTRY_NUM = CONF_REPLAY_QUEUE_ENTRY_NUM;
+localparam REPLAY_QUEUE_ENTRY_NUM_BIT_WIDTH = $clog2(REPLAY_QUEUE_ENTRY_NUM);
+typedef logic [REPLAY_QUEUE_ENTRY_NUM_BIT_WIDTH-1 : 0] ReplayQueueIndexPath;
+typedef logic [REPLAY_QUEUE_ENTRY_NUM_BIT_WIDTH : 0] ReplayQueueCountPath;
+
 // Memory Dependent Predictor
-localparam MDT_ENTRY_NUM = 1024;
+localparam MDT_ENTRY_NUM = CONF_MDT_ENTRY_NUM;
 localparam MDT_ENTRY_NUM_BIT_WIDTH = $clog2(MDT_ENTRY_NUM);
 typedef logic [MDT_ENTRY_NUM_BIT_WIDTH-1:0] MDT_IndexPath;
 

@@ -15,6 +15,7 @@ RSD_SRC_CFG = \
 # TYPES には型定義を含む package を含んだファイルを指定する．
 # ファイルごとの依存関係に気をつけて，依存先が依存元より前にくるようにならべること．
 TYPES = \
+	MicroArchConf.sv \
 	BasicTypes.sv \
 	Memory/MemoryMapTypes.sv \
 	Cache/CacheSystemTypes.sv \
@@ -138,8 +139,9 @@ MODULES = \
 	Cache/DCache.sv \
 	Cache/DCacheIF.sv \
 	Cache/ICache.sv \
-	Cache/CachePrimitives.sv \
 	Cache/MemoryAccessController.sv \
+	Cache/CacheFlushManager.sv \
+	Cache/CacheFlushManagerIF.sv \
 	Memory/Memory.sv \
 	Recovery/RecoveryManager.sv \
 	Recovery/RecoveryManagerIF.sv \
@@ -161,8 +163,8 @@ MODULES = \
 	Primitives/Divider.sv \
 	Debug/Debug.sv \
 	Debug/DebugIF.sv \
-	Debug/HardwareCounter.sv \
-	Debug/HardwareCounterIF.sv \
+	Debug/PerformanceCounter.sv \
+	Debug/PerformanceCounterIF.sv \
 	Memory/Axi4LiteControlRegisterIF.sv \
 	Memory/Axi4LiteControlRegister.sv \
 	Memory/ControlQueue.sv \
@@ -170,11 +172,11 @@ MODULES = \
 	Memory/Axi4MemoryIF.sv \
 	Memory/MemoryReadReqQueue.sv \
 	Memory/MemoryWriteDataQueue.sv \
-	Memory/MemoryRequestQueue.sv \
+	Memory/MemoryLatencySimulator.sv \
 
 # Header files
 # This list is used when generating Vivado custom IP of RSD
 HEADERS = \
 	BasicMacros.sv \
-	SynthesisMacros.svh \
-	XilinxMacros.vh \
+	SysDeps/SynthesisMacros.svh \
+	SysDeps/XilinxMacros.vh \

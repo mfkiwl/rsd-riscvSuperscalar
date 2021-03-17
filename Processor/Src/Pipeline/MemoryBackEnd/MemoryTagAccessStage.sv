@@ -36,7 +36,7 @@ module MemoryTagAccessStage(
     RecoveryManagerIF.MemoryTagAccessStage recovery,
     ControllerIF.MemoryTagAccessStage ctrl,
     DebugIF.MemoryTagAccessStage debug,
-    HardwareCounterIF.MemoryTagAccessStage hwCounter
+    PerformanceCounterIF.MemoryTagAccessStage perfCounter
 );
 
     MemoryTagAccessStageRegPath pipeReg[MEM_ISSUE_WIDTH];
@@ -65,7 +65,7 @@ module MemoryTagAccessStage(
         end
     end
 
-    // Pipeline controll
+    // Pipeline control
     logic stall, clear;
 
     logic lsuMakeMSHRCanBeInvalidByMemoryTagAccessStage[MSHR_NUM];
@@ -75,7 +75,7 @@ module MemoryTagAccessStage(
     MemIssueQueueEntry stIqData[STORE_ISSUE_WIDTH];
 
     always_comb begin
-        // Pipeline controll
+        // Pipeline control
         stall = ctrl.backEnd.stall;
         clear = ctrl.backEnd.clear;
 
@@ -100,8 +100,13 @@ module MemoryTagAccessStage(
     logic ldFlush   [LOAD_ISSUE_WIDTH];
     logic isDiv     [LOAD_ISSUE_WIDTH];
     logic isMul     [LOAD_ISSUE_WIDTH];
+    logic isFenceI  [LOAD_ISSUE_WIDTH];
     MemoryAccessStageRegPath ldNextStage[LOAD_ISSUE_WIDTH];
     MemIssueQueueEntry ldRecordData[LOAD_ISSUE_WIDTH];  // for ReplayQueue
+
+    logic ldMSHR_Allocated[LOAD_ISSUE_WIDTH];
+    logic ldMSHR_Hit[LOAD_ISSUE_WIDTH];
+    DataPath ldMSHR_EntryID[LOAD_ISSUE_WIDTH];
 
     always_comb begin
         for ( int i = 0; i < MSHR_NUM; i++ ) begin
@@ -122,6 +127,7 @@ module MemoryTagAccessStage(
             isENV[i] = ( ldIqData[i].memOpInfo.opType == MEM_MOP_TYPE_ENV );
             isDiv[i] = ( ldIqData[i].memOpInfo.opType == MEM_MOP_TYPE_DIV );
             isMul[i] = ( ldIqData[i].memOpInfo.opType == MEM_MOP_TYPE_MUL );
+            isFenceI[i] = ( ldIqData[i].memOpInfo.opType == MEM_MOP_TYPE_FENCE ) && ldIqData[i].memOpInfo.isFenceI;
 
             // Load store unit
             loadStoreUnit.executeLoad[i] = ldUpdate[i] && isLoad[i];
@@ -144,10 +150,17 @@ module MemoryTagAccessStage(
             ldRecordData[i].storeQueueRecoveryPtr = ldIqData[i].storeQueueRecoveryPtr;
             ldRecordData[i].loadQueueRecoveryPtr  = ldIqData[i].loadQueueRecoveryPtr;
 
+            // For performance counters
+            ldMSHR_Allocated[i] = FALSE;
+            ldMSHR_Hit[i] = FALSE;
+            ldMSHR_EntryID[i] = 0;
+
             // Set MSHR id if the load instruction allocated a MSHR entry.
             if (ldPipeReg[i].memQueueData.memOpInfo.hasAllocatedMSHR) begin
                 ldRecordData[i].memOpInfo.hasAllocatedMSHR = ldPipeReg[i].memQueueData.memOpInfo.hasAllocatedMSHR;
                 ldRecordData[i].memOpInfo.mshrID = ldPipeReg[i].memQueueData.memOpInfo.mshrID;
+                // TODO: バグで Ex ステージで hasAllocatedMSHR が落とされているので，
+                // ここに来ることは絶対無い
             end
             else begin
                 if (i < LOAD_ISSUE_WIDTH) begin
@@ -159,9 +172,17 @@ module MemoryTagAccessStage(
                     // 3. when otherwise (no hit and no allocate), don't ldUpdate.
                     if (loadStoreUnit.loadHasAllocatedMSHR[i]) begin
                         ldRecordData[i].memOpInfo.mshrID = loadStoreUnit.loadMSHRID[i];
+                        // MSHR allocation is performed 
+                        ldMSHR_Allocated[i] = TRUE;
+                        ldMSHR_EntryID[i] = loadStoreUnit.loadMSHRID[i];
                     end
                     else if (loadStoreUnit.mshrAddrHit[i]) begin
+                        // TODO: バグで Ex ステージで hasAllocatedMSHR が落とされているので，
+                        // MSHR 確保後はここのパスを通ってしまう．意図してはいないがたまたま動いている．
                         ldRecordData[i].memOpInfo.mshrID = loadStoreUnit.mshrAddrHitMSHRID[i];
+                        // MSHR Hit?
+                        ldMSHR_Hit[i] = loadStoreUnit.mshrReadHit[i];
+                        ldMSHR_EntryID[i] = loadStoreUnit.mshrAddrHitMSHRID[i];
                     end
                     else begin
                         ldRecordData[i].memOpInfo.mshrID = ldPipeReg[i].memQueueData.memOpInfo.mshrID;
@@ -175,6 +196,7 @@ module MemoryTagAccessStage(
 
             loadStoreUnit.dcReadCancelFromMT_Stage[i] = FALSE;
             
+
 `ifdef RSD_ENABLE_REISSUE_ON_CACHE_MISS
             if (isLoad[i]) begin
                 if (loadStoreUnit.storeLoadForwarded[i]) begin
@@ -283,6 +305,11 @@ module MemoryTagAccessStage(
                 default:
                     ldNextStage[i].execState = EXEC_STATE_TRAP_EBREAK;
                 endcase
+            end
+            else if (isFenceI[i]) begin
+                // FENCE.I flush all following ops when it is committed
+                // not to use the expired data from ICache.
+                ldNextStage[i].execState = EXEC_STATE_REFETCH_NEXT;
             end
 `ifdef RSD_MARCH_UNIFIED_MULDIV_MEM_PIPE
             else if (isDiv[i]) begin
@@ -510,10 +537,11 @@ module MemoryTagAccessStage(
     always_comb begin
 
         // Debug Register
-`ifndef RSD_DISABLE_HARDWARE_COUNTER
+`ifndef RSD_DISABLE_PERFORMANCE_COUNTER
         for ( int i = 0; i < LOAD_ISSUE_WIDTH; i++ ) begin
-            hwCounter.loadMiss[i] =
-                ldUpdate[i] && isLoad[i] && ldPipeReg[i].regValid && !loadStoreUnit.dcReadHit[i];
+            // Record misses only when a MSHR entry is allocated.
+            perfCounter.loadMiss[i] =
+                ldUpdate[i] && isLoad[i] && ldMSHR_Allocated[i];
         end
 `endif
 
@@ -530,6 +558,9 @@ module MemoryTagAccessStage(
             for (int i = 0; i < MEM_ISSUE_WIDTH; i++) begin
                 debug.mtReg[i].executeLoad = isLoad[i] ? loadStoreUnit.executeLoad[i] : FALSE;
                 debug.mtReg[i].executedLoadAddr  = loadStoreUnit.executedLoadAddr[i];
+                debug.mtReg[i].mshrAllocated = ldMSHR_Allocated[i] && ldUpdate[i] && isLoad[i];
+                debug.mtReg[i].mshrHit = ldMSHR_Hit[i] && ldUpdate[i] && isLoad[i];
+                debug.mtReg[i].mshrEntryID = (ldMSHR_Allocated[i] || ldMSHR_Hit[i]) ? ldMSHR_EntryID[i] : 0;
 
                 debug.mtReg[i].executeStore      = isStore[i] ? loadStoreUnit.executeStore[i] : FALSE;
                 debug.mtReg[i].executedStoreAddr = loadStoreUnit.executedStoreAddr[i];
@@ -541,6 +572,9 @@ module MemoryTagAccessStage(
             for (int i = 0; i < LOAD_ISSUE_WIDTH; i++) begin
                 debug.mtReg[i].executeLoad       = loadStoreUnit.executeLoad[i];
                 debug.mtReg[i].executedLoadAddr  = loadStoreUnit.executedLoadAddr[i];
+                debug.mtReg[i].mshrAllocated = ldMSHR_Allocated[i] && ldUpdate[i] && isLoad[i];
+                debug.mtReg[i].mshrHit = ldMSHR_Hit[i] && ldUpdate[i] && isLoad[i];
+                debug.mtReg[i].mshrEntryID = (ldMSHR_Allocated[i] || ldMSHR_Hit[i]) ? ldMSHR_EntryID[i] : 0;
             end
             for (int i = 0; i < STORE_ISSUE_WIDTH; i++) begin
                 debug.mtReg[i+STORE_ISSUE_LANE_BEGIN].executeStore      = loadStoreUnit.executeStore[i];

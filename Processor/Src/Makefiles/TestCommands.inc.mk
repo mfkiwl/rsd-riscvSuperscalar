@@ -18,6 +18,8 @@ LEVEL1_TESTS = \
 	test-RV32I-IntRegRegZynq \
 	test-RV32I-LoadAndStore \
 	test-RV32I-LoadAndStoreZynq \
+	test-RV32I-UncachableLoadAndStore \
+	test-RV32I-CacheFlush \
 	test-RV32I-ZeroRegister \
 	test-RV32I-MemoryAccessZynq \
 	test-RV32I-ReplayQueueTest \
@@ -33,11 +35,12 @@ LEVEL1_TESTS = \
 	test-HelloWorld \
 	test-Fibonacci \
 	test-Exception \
+	test-DCache \
 
 #	test-RV32I-MisalignedMemAccess \
 
 # アドレス変更に伴い，一時的に無効に
-#	test-HardwareCounter \
+#	test-PerformanceCounter \
 
 LEVEL2_TESTS = \
 	test-riscv-compliance \
@@ -145,6 +148,10 @@ test-RV32I-IntRegRegZynq:
 	$(RUN_TEST_OMIT_MSG) Verification/TestCode/Asm/IntRegRegZynq
 test-RV32I-LoadAndStoreZynq:
 	$(RUN_TEST_OMIT_MSG) Verification/TestCode/Asm/LoadAndStoreZynq
+test-RV32I-UncachableLoadAndStore:
+	$(RUN_TEST_OMIT_MSG) Verification/TestCode/Asm/UncachableLoadAndStore
+test-RV32I-CacheFlush:
+	$(RUN_TEST_OMIT_MSG) Verification/TestCode/Asm/CacheFlush
 test-RV32I-ZeroRegister:
 	$(RUN_TEST_OMIT_MSG) Verification/TestCode/Asm/ZeroRegister
 test-RV32I-MemoryAccessZynq:
@@ -181,14 +188,16 @@ test-Coremark:
 	$(RUN_TEST_OMIT_MSG) Verification/TestCode/Coremark/Coremark
 test-Coremark_for_RV32I:
 	$(RUN_TEST_OMIT_MSG) Verification/TestCode/Coremark/Coremark_for_RV32I
-test-HardwareCounter:
-	$(RUN_TEST_OMIT_MSG) Verification/TestCode/C/HardwareCounter
+test-PerformanceCounter:
+	$(RUN_TEST_OMIT_MSG) Verification/TestCode/C/PerformanceCounter
 test-Dhrystone:
 	$(RUN_TEST_OMIT_MSG) Verification/TestCode/Dhrystone/Dhrystone
 test-Dhrystone-for-contest:
 	$(RUN_TEST_OMIT_MSG) Verification/TestCode/Dhrystone/Dhrystone_for_Contest
 test-Exception:
 	$(RUN_TEST_OMIT_MSG) Verification/TestCode/C/Exception
+test-DCache:
+	$(RUN_TEST_OMIT_MSG) Verification/TestCode/C/DCache
 
 
 # Zephyr のテストターゲット
@@ -276,3 +285,19 @@ $(RISCV_RV32I_COMPLIANCE_TEST_TARGETS):
 
 test-riscv-compliance: $(RISCV_RV32I_COMPLIANCE_TEST_TARGETS)
 	@echo "==== Test Successful (test-riscv-compliance) ===="
+
+# Aggregate cycle/IPC information from verilator/modelsim log.
+test-summary-all:
+	grep "Elapsed cycles" Verification/ --include=verilator.log -r | sed -e "s/.\+\/\(.\+\)\/\(.\+\)\/verilator.log:Elapsed cycles:[ ]*/\1\/\2,/g" > verilator-cycles.csv
+	grep "IPC (RISC-V instruction)" Verification/ --include=verilator.log -r | sed -e "s/.\+\/\(.\+\)\/\(.\+\)\/verilator.log:IPC (RISC-V instruction):[ ]*/\1\/\2,/g" > verilator-ipc.csv
+	grep "Num of I$$ misses" Verification/ --include=verilator.log -r | sed -e "s/.\+\/\(.\+\)\/\(.\+\)\/verilator.log:Num of I$$ misses:[ ]*/\1\/\2,/g" > verilator-icache-misses.csv
+	grep "Num of D$$ load misses" Verification/ --include=verilator.log -r | sed -e "s/.\+\/\(.\+\)\/\(.\+\)\/verilator.log:Num of D$$ load misses:[ ]*/\1\/\2,/g" > verilator-load-misses.csv
+	grep "Num of D$$ store misses" Verification/ --include=verilator.log -r | sed -e "s/.\+\/\(.\+\)\/\(.\+\)\/verilator.log:Num of D$$ store misses:[ ]*/\1\/\2,/g" > verilator-store-misses.csv
+	grep "Num of branch prediction misses" Verification/ --include=verilator.log -r | sed -e "s/.\+\/\(.\+\)\/\(.\+\)\/verilator.log:Num of branch prediction misses:[ ]*/\1\/\2,/g" > verilator-br-pred-misses.csv
+	grep "Elapsed cycles" Verification/ --include=vsim.log -r | sed -e "s/.\+\/\(.\+\)\/\(.\+\)\/vsim.log:# Elapsed cycles:[ ]*/\1\/\2,/g" > modelsim-cycles.csv
+	grep "IPC (RISC-V instruction)" Verification/ --include=vsim.log -r | sed -e "s/.\+\/\(.\+\)\/\(.\+\)\/vsim.log:# IPC (RISC-V instruction):[ ]*/\1\/\2,/g" > modelsim-ipc.csv
+	grep "Num of I$$ misses" Verification/ --include=vsim.log -r | sed -e "s/.\+\/\(.\+\)\/\(.\+\)\/vsim.log:# Num of I$$ misses:[ ]*/\1\/\2,/g" > vsim-icache-misses.csv
+	grep "Num of D$$ load misses" Verification/ --include=vsim.log -r | sed -e "s/.\+\/\(.\+\)\/\(.\+\)\/vsim.log:# Num of D$$ load misses:[ ]*/\1\/\2,/g" > vsim-load-misses.csv
+	grep "Num of D$$ store misses" Verification/ --include=vsim.log -r | sed -e "s/.\+\/\(.\+\)\/\(.\+\)\/vsim.log:# Num of D$$ store misses:[ ]*/\1\/\2,/g" > vsim-store-misses.csv
+	grep "Num of branch prediction misses" Verification/ --include=vsim.log -r | sed -e "s/.\+\/\(.\+\)\/\(.\+\)\/vsim.log:# Num of branch prediction misses:[ ]*/\1\/\2,/g" > vsim-br-pred-misses.csv
+

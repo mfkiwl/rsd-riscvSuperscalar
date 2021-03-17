@@ -2751,6 +2751,16 @@
         <ns0:userFileType>IMPORTED_FILE</ns0:userFileType>
       </ns0:file>
       <ns0:file>
+        <ns0:name>../../../../../../Src/Cache/CacheFlushManager.sv</ns0:name>
+        <ns0:fileType>systemVerilogSource</ns0:fileType>
+        <ns0:userFileType>IMPORTED_FILE</ns0:userFileType>
+      </ns0:file>
+      <ns0:file>
+        <ns0:name>../../../../../../Src/Cache/CacheFlushManagerIF.sv</ns0:name>
+        <ns0:fileType>systemVerilogSource</ns0:fileType>
+        <ns0:userFileType>IMPORTED_FILE</ns0:userFileType>
+      </ns0:file>
+      <ns0:file>
         <ns0:name>../../../../../../Src/Memory/Memory.sv</ns0:name>
         <ns0:fileType>systemVerilogSource</ns0:fileType>
         <ns0:userFileType>IMPORTED_FILE</ns0:userFileType>
@@ -2901,7 +2911,7 @@
         <ns0:userFileType>IMPORTED_FILE</ns0:userFileType>
       </ns0:file>
       <ns0:file>
-        <ns0:name>../../../../../../Src/Memory/MemoryRequestQueue.sv</ns0:name>
+        <ns0:name>../../../../../../Src/Memory/MemoryLatencySimulator.sv</ns0:name>
         <ns0:fileType>systemVerilogSource</ns0:fileType>
         <ns0:userFileType>IMPORTED_FILE</ns0:userFileType>
       </ns0:file>
@@ -2912,13 +2922,13 @@
         <ns0:isIncludeFile>true</ns0:isIncludeFile>
       </ns0:file>
       <ns0:file>
-        <ns0:name>../../../../../../Src/SynthesisMacros.svh</ns0:name>
+        <ns0:name>../../../../../../Src/SysDeps/SynthesisMacros.svh</ns0:name>
         <ns0:fileType>systemVerilogSource</ns0:fileType>
         <ns0:userFileType>IMPORTED_FILE</ns0:userFileType>
         <ns0:isIncludeFile>true</ns0:isIncludeFile>
       </ns0:file>
       <ns0:file>
-        <ns0:name>../../../../../../Src/XilinxMacros.vh</ns0:name>
+        <ns0:name>../../../../../../Src/SysDeps/XilinxMacros.vh</ns0:name>
         <ns0:fileType>systemVerilogSource</ns0:fileType>
         <ns0:userFileType>IMPORTED_FILE</ns0:userFileType>
         <ns0:isIncludeFile>true</ns0:isIncludeFile>

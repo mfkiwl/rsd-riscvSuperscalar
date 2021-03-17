@@ -19,7 +19,8 @@ module StoreCommitter(
     LoadStoreUnitIF.StoreCommitter port,
     RecoveryManagerIF.StoreCommitter recovery,
     IO_UnitIF.StoreCommitter ioUnit,
-    DebugIF.StoreCommitter debug
+    DebugIF.StoreCommitter debug,
+    PerformanceCounterIF.StoreCommitter perfCounter
 );
 
     // State machine
@@ -85,6 +86,7 @@ module StoreCommitter(
         LSQ_BlockWordEnablePath wordWE;
         LSQ_WordByteEnablePath byteWE;
         logic isIO;
+        logic isUncachable;
     } StgReg;
 
     StgReg tagStagePipeReg;
@@ -160,7 +162,7 @@ module StoreCommitter(
     endfunction
 
 
-    // Pipeline stage strcuture:
+    // Pipeline stage structure:
     // | Commit | SQ | Tag | Data
     //
     // Commit: The processor commit stage.
@@ -173,8 +175,10 @@ module StoreCommitter(
     logic dcWriteReq;
     PhyAddrPath dcWriteAddr;
     DCacheLinePath dcWriteData;
+    logic dcWriteUncachable;
     logic isIO;
     logic [DCACHE_LINE_BYTE_NUM-1:0] dcWriteByteWE;
+    logic isUncachable;
     StoreQueueIndexPath retiredStoreQueuePtr;
     // --- SQ stage.
     always_comb begin
@@ -200,6 +204,13 @@ module StoreCommitter(
                     port.retiredStoreLSQ_BlockAddr, port.retiredStoreWordWE
                 )
             );
+        
+        isUncachable =
+            IsPhyAddrUncachable(
+                LSQ_ToFullPhyAddrFromBlockAddrAndWordWE(
+                    port.retiredStoreLSQ_BlockAddr, port.retiredStoreWordWE
+                )
+            );
 
         port.busyInRecovery = phase == PHASE_RECOVER;
 
@@ -211,6 +222,7 @@ module StoreCommitter(
         end
         else begin
             nextTagStagePipeReg.isIO = isIO;
+            nextTagStagePipeReg.isUncachable = isUncachable;
 
             // Push an store access to the store commit pipeline.
             if (!port.retiredStoreCondEnabled || isIO) begin
@@ -249,6 +261,8 @@ module StoreCommitter(
                 GenerateDCacheLine(tagStagePipeReg.data);
             dcWriteByteWE =
                 GenerateDCacheWriteEnable(tagStagePipeReg.wordWE, tagStagePipeReg.byteWE, tagStagePipeReg.blockAddr);
+            dcWriteUncachable = 
+                tagStagePipeReg.isUncachable;
         end
         else begin
             dcWriteAddr =
@@ -257,16 +271,21 @@ module StoreCommitter(
                 GenerateDCacheLine(port.retiredStoreData);
             dcWriteByteWE =
                 GenerateDCacheWriteEnable(port.retiredStoreWordWE, port.retiredStoreByteWE, port.retiredStoreLSQ_BlockAddr);
+            dcWriteUncachable =
+                isUncachable;
         end
 
         port.dcWriteReq = dcWriteReq;
         port.dcWriteData = dcWriteData;
         port.dcWriteByteWE = dcWriteByteWE;
         port.dcWriteAddr = dcWriteAddr;
+        port.dcWriteUncachable = dcWriteUncachable;
     end
 
     // --- Tag stage
+    logic finishWriteBack;
     always_comb begin
+        finishWriteBack = FALSE;
         if (tagStagePipeReg.valid) begin
             if(!tagStagePipeReg.condEnabled || tagStagePipeReg.isIO) begin
                 stallStoreTagStage = FALSE;
@@ -275,6 +294,7 @@ module StoreCommitter(
                 // When a head store has allocated a mshr entry, stall until its data is written to cache by MSHR.
                 if (portMSHRPhase[storeMSHRID] > MSHR_PHASE_MISS_WRITE_CACHE_REQUEST) begin
                     stallStoreTagStage = FALSE;
+                    finishWriteBack = TRUE;
                 end
                 else begin
                     stallStoreTagStage = TRUE;
@@ -292,6 +312,12 @@ module StoreCommitter(
         if (stallStoreTagStage) begin
             nextDataStagePipeReg.valid = FALSE;
         end
+
+`ifndef RSD_DISABLE_PERFORMANCE_COUNTER
+        for (int i = 0; i < STORE_ISSUE_WIDTH; i++) begin
+            perfCounter.storeMiss[i] = i == 0 ? finishWriteBack : FALSE;  // Only supports a single store port 
+        end
+`endif
     end
 
     // Whether to release the head entry(s) of the SQ.

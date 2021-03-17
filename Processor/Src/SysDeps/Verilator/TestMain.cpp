@@ -53,6 +53,8 @@ int GetCommittedRegisterValue(
     for(int i = 0; i < LSCALAR_NUM; i++) {
         regData[i] = core->registerFile->phyReg->debugValue[phyRegNum[i]];
     }
+    
+    return 0;
 }
 
 
@@ -147,7 +149,7 @@ int main(int argc, char** argv) {
     serialDumper.Open(serialDumpFileName);
 
     // The word of the main memory is 128 bits.
-    // A word is implemetned as uint32_t[4] in verilated modules.
+    // A word is implemented as uint32_t[4] in verilated modules.
     //int MEMORY_ENTRY_NUM = top->MemoryTypes->MEMORY_ENTRY_NUM;
     //uint32_t* mainMem = &(top->Main_Zynq_Wrapper->main->memory->body->array[0][0]);
     //assert(top->MemoryTypes->MEMORY_ENTRY_BIT_NUM == 128);
@@ -193,8 +195,8 @@ int main(int argc, char** argv) {
         printf(
             "Loaded %s into a physical memory region [%x-%x].\n",
             fileName.c_str(),
-            offset,
-            offset + wordAddr * sizeof(uint32_t) - 1
+            (uint32_t)offset,
+            (uint32_t)(offset + wordAddr * sizeof(uint32_t) - 1)
         );
     };
     // ファイル内容は物理メモリ空間の先頭から連続して展開される
@@ -216,10 +218,10 @@ int main(int argc, char** argv) {
 
     // TestBenchClockGenerator にあわせる
     const int RSD_STEP = 8;   
-    const int RSD_KANATA_CYCLE_DISPLACEMENT = 12;
+    const int RSD_KANATA_CYCLE_DISPLACEMENT = -1;
     const int RSD_INITIALIZATION_CYCLE = 8;
-    int64_t cycle = 0;
-    int64_t kanataCycle = -RSD_KANATA_CYCLE_DISPLACEMENT;
+    int64_t cycle = -1;
+    int64_t kanataCycle = cycle - RSD_KANATA_CYCLE_DISPLACEMENT;
 
     bool start = false; // タイミングを TestMain.sv にあわせるため
 
@@ -254,7 +256,7 @@ int main(int argc, char** argv) {
 
                 // ダンプ
                 GetDebugRegister(&debugRegister, top);
-                if (!SHOW_SERIAL_OUT && kanataCycle < 10000 || kanataCycle % 10000 == 0){
+                if (!SHOW_SERIAL_OUT && (kanataCycle < 10000 || kanataCycle % 10000 == 0)){
                     printf("%d cycle, %d KanataCycle, %d ns\n", (uint32_t)cycle, (uint32_t)kanataCycle, (uint32_t)main_time);
                 }
 
@@ -299,8 +301,7 @@ int main(int argc, char** argv) {
                     lastCommittedPC = top->ledOut;
                     if (lastCommittedPC == static_cast<typeof(top->ledOut)>(PC_GOAL)) {
                         // lastCommittedPC は 16bit 分しか外に出てきていないので，下位で判定しておく
-                        printf("PC reached PC_GOAL:%08x\n", PC_GOAL);
-                        printf("GoalCycle:%d\n", (int32_t)cycle);
+                        printf("PC reached PC_GOAL: %08x\n", PC_GOAL);
                         break;
                     }
                 }
@@ -313,7 +314,8 @@ int main(int argc, char** argv) {
             }
             
             // 指定サイクル数の実行で終了
-            if (kanataCycle > MAX_TEST_CYCLES)
+            // Modelsim 側とクロック数の計算をあわすため +1
+            if (cycle + 1 >= MAX_TEST_CYCLES)
                 break;         
         }
 
@@ -336,12 +338,21 @@ int main(int argc, char** argv) {
     registerFileCSV_Dumper.Close();
 
     // Simulation Result
-    printf("Num of committed RISC-V-ops : %d\n", numCommittedARM_Op);
-    printf("Num of committed micro-ops : %d\n", numCommittedMicroOp);
+    printf("Num of I$ misses: %d\n", debugRegister.perfCounter.numIC_Miss);
+    printf("Num of D$ load misses: %d\n", debugRegister.perfCounter.numLoadMiss);
+    printf("Num of D$ store misses: %d\n", debugRegister.perfCounter.numStoreMiss);
+    printf("Num of branch prediction misses: %d\n", debugRegister.perfCounter.numBranchPredMiss);
+    printf("Num of branch prediction misses detected on decode: %d\n", debugRegister.perfCounter.numBranchPredMissDetectedOnDecode);
+    printf("Num of store-load-forwanind misses: %d\n", debugRegister.perfCounter.numStoreLoadForwardingFail);
+    printf("Num of memory dependency prediction misses: %d\n", debugRegister.perfCounter.numMemDepPredMiss);
+
+    printf("Num of committed RISC-V-ops: %d\n", numCommittedARM_Op);
+    printf("Num of committed micro-ops: %d\n", numCommittedMicroOp);
     if (cycle != 0) {
         printf("IPC (RISC-V instruction): %f\n", (double)numCommittedARM_Op / (double)cycle);
         printf("IPC (micro-op): %f\n", (double)numCommittedMicroOp / (double)cycle);
     }
+    printf("Elapsed cycles: %d\n", (int32_t)cycle);
 
     // Dump Register File
     RegisterFileHexDumper registerFileHexDumper;

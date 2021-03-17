@@ -12,8 +12,9 @@ TARGETS = all clean
 SRC_DIRS = \
 	Fibonacci \
 	HelloWorld \
-	HardwareCounter \
+	PerformanceCounter \
 	Exception \
+	DCache \
 
 
 # TARGETS の中のどれかに該当した場合，SRC_DIRS が依存元となる
